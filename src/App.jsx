@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { supabase } from "./supabase.js";
 
 /* ════════════════════════════════════════════════════════════════
    NULLSPACE STUDIO LLC — Project Directory
-   Black + Green Cyber-Luxury Theme
+   Black + Green Cyber-Luxury Theme + Supabase Persistence
    Pages: Directory, Privacy, Admin, Messenger
    ════════════════════════════════════════════════════════════════ */
 
@@ -139,53 +140,9 @@ const Icons = {
   ),
 };
 
-// ─── INITIAL DEMO DATA ───
-const INITIAL_PROJECTS = [
-  {
-    id: uid(),
-    title: "ParcelChain",
-    description: "Buy real USPS, UPS, and FedEx shipping labels using Bitcoin or Monero. Crypto-powered logistics for the modern era.",
-    url: "https://parcelchain.io",
-    category: "Web App",
-    type: "app",
-    image: null,
-    dateAdded: "Mar 10, 2026, 2:30 PM",
-    status: "active",
-  },
-  {
-    id: uid(),
-    title: "NullSpace Studio",
-    description: "The official homepage for NullSpace Studio LLC. Central hub for all projects, services, and contact information.",
-    url: "https://nullspacestudio.com",
-    category: "Website",
-    type: "website",
-    image: null,
-    dateAdded: "Feb 22, 2026, 11:15 AM",
-    status: "active",
-  },
-  {
-    id: uid(),
-    title: "VoidPay API",
-    description: "Lightweight payment processing API for integrating crypto and fiat transactions into any application.",
-    url: "https://voidpay.dev/docs",
-    category: "API",
-    type: "api",
-    image: null,
-    dateAdded: "Jan 14, 2026, 4:00 PM",
-    status: "active",
-  },
-  {
-    id: uid(),
-    title: "DarkRoute VPN",
-    description: "Privacy-first VPN tool with zero-log policy. Lightweight client for desktop and mobile with WireGuard support.",
-    url: "https://darkroute.app",
-    category: "Tool",
-    type: "tool",
-    image: null,
-    dateAdded: "Dec 8, 2025, 10:20 AM",
-    status: "paused",
-  },
-];
+// ─── INITIAL DEMO DATA (fallback if Supabase is empty or not configured) ───
+const FALLBACK_PROJECTS = [];
+const FALLBACK_MEDIA = [];
 
 const PROJECT_TYPES = [
   { key: "all", label: "All" },
@@ -193,27 +150,6 @@ const PROJECT_TYPES = [
   { key: "app", label: "Apps" },
   { key: "api", label: "APIs" },
   { key: "tool", label: "Tools" },
-];
-
-const INITIAL_MEDIA = [
-  {
-    id: uid(),
-    type: "youtube",
-    title: "NullSpace Studio — What We're Building",
-    description: "A quick look at the projects and tools coming out of NullSpace Studio LLC in 2026.",
-    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    image: null,
-    dateAdded: "Mar 12, 2026, 3:45 PM",
-  },
-  {
-    id: uid(),
-    type: "image",
-    title: "ParcelChain Dashboard Preview",
-    description: "Early screenshot of the ParcelChain shipping label interface with crypto payment flow.",
-    url: "",
-    image: null,
-    dateAdded: "Mar 1, 2026, 10:00 AM",
-  },
 ];
 
 const MEDIA_TYPES = [
@@ -229,22 +165,126 @@ const DONATE_CONFIG = {
   xmrAddress: "4YOUR_MONERO_ADDRESS_HERE",
 };
 
-// No services — this is a project directory, not a consulting site
+const DEFAULT_CREDENTIALS = {
+  passkey: "332347213323",
+  email: "badassinc21@gmail.com",
+  password: "Blake101",
+};
 
-const INITIAL_ANALYTICS = {
-  totalVisitors: 12847,
-  totalClicks: 4231,
-  uniqueVisitors: 8392,
-  bounceRate: 34.2,
-  daily: [
-    { day: "Mon", visitors: 420, clicks: 134 },
-    { day: "Tue", visitors: 385, clicks: 122 },
-    { day: "Wed", visitors: 510, clicks: 178 },
-    { day: "Thu", visitors: 445, clicks: 156 },
-    { day: "Fri", visitors: 620, clicks: 210 },
-    { day: "Sat", visitors: 380, clicks: 98 },
-    { day: "Sun", visitors: 290, clicks: 76 },
-  ],
+// ─── Supabase helper: check if configured ───
+const isSupabaseConfigured = () => {
+  try {
+    return supabase && supabase.supabaseUrl && !supabase.supabaseUrl.includes("YOUR_PROJECT_ID");
+  } catch { return false; }
+};
+
+// ─── Supabase CRUD helpers ───
+const db = {
+  // Projects
+  async loadProjects() {
+    if (!isSupabaseConfigured()) return FALLBACK_PROJECTS;
+    const { data, error } = await supabase.from("projects").select("*").order("date_added", { ascending: false });
+    if (error) { console.error("Load projects:", error); return FALLBACK_PROJECTS; }
+    return data.map(p => ({
+      id: p.id, title: p.title, description: p.description, url: p.url,
+      category: p.category, type: p.type, image: p.image,
+      status: p.status, dateAdded: p.date_added ? new Date(p.date_added).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) : "",
+    }));
+  },
+  async saveProject(p) {
+    if (!isSupabaseConfigured()) return;
+    const row = { id: p.id, title: p.title, description: p.description, url: p.url, category: p.category, type: p.type, image: p.image, status: p.status, date_added: new Date().toISOString() };
+    const { error } = await supabase.from("projects").upsert(row, { onConflict: "id" });
+    if (error) console.error("Save project:", error);
+  },
+  async deleteProject(id) {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.from("projects").delete().eq("id", id);
+    if (error) console.error("Delete project:", error);
+  },
+
+  // Media
+  async loadMedia() {
+    if (!isSupabaseConfigured()) return FALLBACK_MEDIA;
+    const { data, error } = await supabase.from("media").select("*").order("date_added", { ascending: false });
+    if (error) { console.error("Load media:", error); return FALLBACK_MEDIA; }
+    return data.map(m => ({
+      id: m.id, type: m.type, title: m.title, description: m.description,
+      url: m.url, image: m.image, videoFile: m.video_file,
+      dateAdded: m.date_added ? new Date(m.date_added).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) : "",
+    }));
+  },
+  async saveMedia(m) {
+    if (!isSupabaseConfigured()) return;
+    const row = { id: m.id, type: m.type, title: m.title, description: m.description, url: m.url, image: m.image, video_file: m.videoFile || null, date_added: new Date().toISOString() };
+    const { error } = await supabase.from("media").upsert(row, { onConflict: "id" });
+    if (error) console.error("Save media:", error);
+  },
+  async deleteMedia(id) {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.from("media").delete().eq("id", id);
+    if (error) console.error("Delete media:", error);
+  },
+
+  // Messages
+  async loadMessages() {
+    if (!isSupabaseConfigured()) return [];
+    const { data, error } = await supabase.from("messages").select("*").order("created_at", { ascending: false });
+    if (error) { console.error("Load messages:", error); return []; }
+    return data;
+  },
+  async saveMessage(m) {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.from("messages").insert({ id: m.id, email: m.email || "", text: m.text, image: m.image, time: m.time });
+    if (error) console.error("Save message:", error);
+  },
+  async clearMessages() {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.from("messages").delete().neq("id", "");
+    if (error) console.error("Clear messages:", error);
+  },
+
+  // Settings
+  async loadSettings() {
+    if (!isSupabaseConfigured()) return DEFAULT_CREDENTIALS;
+    const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).single();
+    if (error || !data) { console.error("Load settings:", error); return DEFAULT_CREDENTIALS; }
+    return { passkey: data.passkey, email: data.email, password: data.password };
+  },
+  async updateSetting(field, value) {
+    if (!isSupabaseConfigured()) return;
+    const { error } = await supabase.from("site_settings").update({ [field]: value, updated_at: new Date().toISOString() }).eq("id", 1);
+    if (error) console.error("Update setting:", error);
+  },
+
+  // Analytics — increment visitor count
+  async trackVisit() {
+    if (!isSupabaseConfigured()) return;
+    const { data } = await supabase.from("analytics").select("*").eq("id", 1).single();
+    if (data) {
+      await supabase.from("analytics").update({
+        total_visitors: (data.total_visitors || 0) + 1,
+        unique_visitors: (data.unique_visitors || 0) + 1,
+        updated_at: new Date().toISOString()
+      }).eq("id", 1);
+    }
+  },
+  async trackClick() {
+    if (!isSupabaseConfigured()) return;
+    const { data } = await supabase.from("analytics").select("*").eq("id", 1).single();
+    if (data) {
+      await supabase.from("analytics").update({
+        total_clicks: (data.total_clicks || 0) + 1,
+        updated_at: new Date().toISOString()
+      }).eq("id", 1);
+    }
+  },
+  async loadAnalytics() {
+    if (!isSupabaseConfigured()) return { totalVisitors: 0, totalClicks: 0, uniqueVisitors: 0, bounceRate: 0 };
+    const { data, error } = await supabase.from("analytics").select("*").eq("id", 1).single();
+    if (error || !data) return { totalVisitors: 0, totalClicks: 0, uniqueVisitors: 0, bounceRate: 0 };
+    return { totalVisitors: data.total_visitors || 0, totalClicks: data.total_clicks || 0, uniqueVisitors: data.unique_visitors || 0, bounceRate: 0 };
+  },
 };
 
 // ═══════════════════════════════════════════════════
@@ -1144,11 +1184,13 @@ body {
 function MessengerPanel({ open, onClose, onVisitorMessage }) {
   const [messages, setMessages] = useState([
     {
-      id: uid(), text: "Welcome to NullSpace Studio! Got questions about any of our projects or want to collaborate? Drop us a message.",
-      sender: "system", time: "Mar 15, 2026, 9:00 AM", image: null
+      id: uid(), text: "Welcome to NullSpace Studio! Got questions about any of our projects or want to collaborate? Drop us a message and leave your email so we can get back to you.",
+      sender: "system", time: now(), image: null
     }
   ]);
   const [input, setInput] = useState("");
+  const [visitorEmail, setVisitorEmail] = useState("");
+  const [emailSubmitted, setEmailSubmitted] = useState(false);
   const [pendingImage, setPendingImage] = useState(null);
   const bodyRef = useRef(null);
   const fileRef = useRef(null);
@@ -1167,12 +1209,12 @@ function MessengerPanel({ open, onClose, onVisitorMessage }) {
     setInput("");
     setPendingImage(null);
 
-    // Forward to admin inbox
+    // Forward to admin inbox with email
     if (onVisitorMessage) {
-      onVisitorMessage({ id: uid(), text: newMsg.text, time: newMsg.time, image: newMsg.image });
+      onVisitorMessage({ id: uid(), email: visitorEmail, text: newMsg.text, time: newMsg.time, image: newMsg.image });
     }
 
-    // Auto-reply after a short delay
+    // Auto-reply
     setTimeout(() => {
       setMessages(prev => [...prev, {
         id: uid(),
@@ -1201,6 +1243,44 @@ function MessengerPanel({ open, onClose, onVisitorMessage }) {
           <h3>Messages</h3>
           <button onClick={onClose}>{Icons.x}</button>
         </div>
+
+        {/* Email prompt bar */}
+        {!emailSubmitted ? (
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--black-3)" }}>
+            <label style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 6 }}>
+              Your email (so we can reply)
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="email" value={visitorEmail}
+                onChange={e => setVisitorEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{ flex: 1, padding: "8px 12px", background: "var(--black-5)", border: "1px solid var(--border)", borderRadius: "var(--radius)", color: "var(--text)", fontFamily: "var(--font-display)", fontSize: 13, outline: "none" }}
+                onKeyDown={e => { if (e.key === "Enter" && visitorEmail.trim()) setEmailSubmitted(true); }}
+              />
+              <button
+                className="btn-green"
+                style={{ fontSize: 12, padding: "8px 14px" }}
+                onClick={() => { if (visitorEmail.trim()) setEmailSubmitted(true); }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--border)", background: "var(--black-3)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>
+              {visitorEmail}
+            </span>
+            <button
+              style={{ fontSize: 11, color: "var(--green)", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)" }}
+              onClick={() => setEmailSubmitted(false)}
+            >
+              Edit
+            </button>
+          </div>
+        )}
+
         <div className="messenger-body" ref={bodyRef}>
           {messages.map((m) => (
             <div key={m.id} className={`msg ${m.sender === "user" ? "sent" : "received"}`}>
@@ -2003,11 +2083,10 @@ function PrivacyPage() {
 }
 
 // ─── ADMIN PAGE ───
-function AdminPage({ projects, setProjects, analytics, isLoggedIn, onLogin, inboxMessages, onClearInbox, credentials, onUpdateCredentials }) {
+function AdminPage({ projects, setProjects, analytics, isLoggedIn, onLogin, inboxMessages, onClearInbox, credentials, onUpdateCredentials, onSaveProject, onDeleteProject }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [adminTab, setAdminTab] = useState("overview");
-  // Credentials edit state
   const [newPasskey, setNewPasskey] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -2029,20 +2108,12 @@ function AdminPage({ projects, setProjects, analytics, isLoggedIn, onLogin, inbo
   }
 
   const handleSave = (project) => {
-    setProjects(prev => {
-      const idx = prev.findIndex(p => p.id === project.id);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = project;
-        return updated;
-      }
-      return [...prev, project];
-    });
+    if (onSaveProject) onSaveProject(project);
     setEditProject(null);
   };
 
   const handleDelete = (id) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
+    if (onDeleteProject) onDeleteProject(id);
   };
 
   const handleCredUpdate = (field) => {
@@ -2171,9 +2242,14 @@ function AdminPage({ projects, setProjects, analytics, isLoggedIn, onLogin, inbo
                     {Icons.user}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>Visitor</span>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{m.email || "Anonymous Visitor"}</span>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)", marginLeft: 8 }}>{m.time}</span>
                   </div>
+                  {m.email && (
+                    <a href={`mailto:${m.email}`} className="btn-ghost" style={{ fontSize: 11, padding: "4px 10px", textDecoration: "none" }}>
+                      Reply
+                    </a>
+                  )}
                 </div>
                 {m.image && (
                   <img src={m.image} alt="attachment" style={{ maxWidth: 200, maxHeight: 120, borderRadius: "var(--radius)", border: "1px solid var(--border)" }} />
@@ -2266,35 +2342,65 @@ function AdminPage({ projects, setProjects, analytics, isLoggedIn, onLogin, inbo
 }
 
 // ═══════════════════════════════════════════════════
-//  APP ROOT
+//  APP ROOT — Supabase-connected
 // ═══════════════════════════════════════════════════
 export default function App() {
   const [page, setPage] = useState("home");
   const [messengerOpen, setMessengerOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [loginStep, setLoginStep] = useState("passkey"); // "passkey" | "credentials"
+  const [loginStep, setLoginStep] = useState("passkey");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
-  const [media, setMedia] = useState(INITIAL_MEDIA);
+  const [projects, setProjects] = useState([]);
+  const [media, setMedia] = useState([]);
   const [mediaModalOpen, setMediaModalOpen] = useState(false);
-  const [analytics] = useState(INITIAL_ANALYTICS);
-  const [msgCount, setMsgCount] = useState(1);
+  const [analytics, setAnalytics] = useState({ totalVisitors: 0, totalClicks: 0, uniqueVisitors: 0, bounceRate: 0 });
+  const [msgCount, setMsgCount] = useState(0);
   const [loginError, setLoginError] = useState(false);
   const [passkeyError, setPasskeyError] = useState(false);
   const [inboxMessages, setInboxMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Editable credentials
-  const [credentials, setCredentials] = useState({
-    passkey: "332347213323",
-    email: "badassinc21@gmail.com",
-    password: "Blake101",
-  });
+  // Editable credentials (loaded from Supabase)
+  const [credentials, setCredentials] = useState(DEFAULT_CREDENTIALS);
+
+  // ─── Load everything from Supabase on mount ───
+  useEffect(() => {
+    async function init() {
+      try {
+        const [p, m, msgs, creds, stats] = await Promise.all([
+          db.loadProjects(),
+          db.loadMedia(),
+          db.loadMessages(),
+          db.loadSettings(),
+          db.loadAnalytics(),
+        ]);
+        setProjects(p);
+        setMedia(m);
+        setInboxMessages(msgs);
+        setCredentials(creds);
+        setAnalytics(stats);
+        if (msgs.length > 0) setMsgCount(msgs.length);
+
+        // Track this page visit
+        db.trackVisit();
+      } catch (err) {
+        console.error("Init error:", err);
+      }
+      setLoading(false);
+    }
+    init();
+
+    // Check if admin was logged in (session persistence)
+    const session = sessionStorage.getItem("ns_admin");
+    if (session === "true") setIsLoggedIn(true);
+  }, []);
 
   const navigate = (p) => {
     setPage(p);
     setMobileNav(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+    db.trackClick();
   };
 
   const openLoginModal = () => {
@@ -2318,6 +2424,7 @@ export default function App() {
       setIsLoggedIn(true);
       setLoginOpen(false);
       setLoginError(false);
+      sessionStorage.setItem("ns_admin", "true");
     } else {
       setLoginError(true);
     }
@@ -2327,16 +2434,65 @@ export default function App() {
     setIsLoggedIn(false);
     setLoginOpen(false);
     setPage("home");
+    sessionStorage.removeItem("ns_admin");
   };
 
-  const handleUpdateCredentials = (field, value) => {
+  const handleUpdateCredentials = async (field, value) => {
     setCredentials(prev => ({ ...prev, [field]: value }));
+    await db.updateSetting(field, value);
   };
 
-  // Called by messenger when a visitor sends a message
-  const handleVisitorMessage = (msg) => {
-    setInboxMessages(prev => [...prev, msg]);
+  // Project CRUD
+  const handleSaveProject = async (project) => {
+    setProjects(prev => {
+      const idx = prev.findIndex(p => p.id === project.id);
+      if (idx >= 0) { const u = [...prev]; u[idx] = project; return u; }
+      return [project, ...prev];
+    });
+    await db.saveProject(project);
   };
+
+  const handleDeleteProject = async (id) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+    await db.deleteProject(id);
+  };
+
+  // Media CRUD
+  const handleSaveMedia = async (m) => {
+    setMedia(prev => [m, ...prev]);
+    await db.saveMedia(m);
+  };
+
+  const handleDeleteMedia = async (id) => {
+    setMedia(prev => prev.filter(m => m.id !== id));
+    await db.deleteMedia(id);
+  };
+
+  // Messages
+  const handleVisitorMessage = async (msg) => {
+    setInboxMessages(prev => [msg, ...prev]);
+    await db.saveMessage(msg);
+  };
+
+  const handleClearInbox = async () => {
+    setInboxMessages([]);
+    await db.clearMessages();
+  };
+
+  if (loading) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <div className="grid-bg" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "var(--font-mono)", color: "var(--green)", fontSize: 14, background: "var(--black)" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 12px var(--green)", margin: "0 auto 16px", animation: "pulse-dot 1s ease-in-out infinite" }} />
+            Loading NullSpace Studio...
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -2393,7 +2549,7 @@ export default function App() {
             onNavigate={navigate}
             isLoggedIn={isLoggedIn}
             onAddMedia={() => setMediaModalOpen(true)}
-            onDeleteMedia={(id) => setMedia(prev => prev.filter(m => m.id !== id))}
+            onDeleteMedia={handleDeleteMedia}
           />
         )}
         {page === "privacy" && <PrivacyPage />}
@@ -2405,9 +2561,11 @@ export default function App() {
             isLoggedIn={isLoggedIn}
             onLogin={openLoginModal}
             inboxMessages={inboxMessages}
-            onClearInbox={() => setInboxMessages([])}
+            onClearInbox={handleClearInbox}
             credentials={credentials}
             onUpdateCredentials={handleUpdateCredentials}
+            onSaveProject={handleSaveProject}
+            onDeleteProject={handleDeleteProject}
           />
         )}
       </div>
@@ -2421,7 +2579,7 @@ export default function App() {
       {/* ── Messenger ── */}
       <MessengerPanel open={messengerOpen} onClose={() => setMessengerOpen(false)} onVisitorMessage={handleVisitorMessage} />
 
-      {/* ── Login Modal (Passkey → Credentials) ── */}
+      {/* ── Login Modal ── */}
       <LoginModal
         open={loginOpen}
         onClose={() => { setLoginOpen(false); setLoginError(false); setPasskeyError(false); }}
@@ -2438,7 +2596,7 @@ export default function App() {
       <MediaModal
         open={mediaModalOpen}
         onClose={() => setMediaModalOpen(false)}
-        onSave={(newMedia) => setMedia(prev => [newMedia, ...prev])}
+        onSave={handleSaveMedia}
       />
     </>
   );
