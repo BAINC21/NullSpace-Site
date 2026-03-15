@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "./supabase.js";
+import { supabase, supabaseReady } from "./supabase.js";
 
 /* ════════════════════════════════════════════════════════════════
    NULLSPACE STUDIO LLC — Project Directory
@@ -141,7 +141,19 @@ const Icons = {
 };
 
 // ─── INITIAL DEMO DATA (fallback if Supabase is empty or not configured) ───
-const FALLBACK_PROJECTS = [];
+const FALLBACK_PROJECTS = [
+  {
+    id: "demo-1",
+    title: "ParcelChain",
+    description: "Buy real USPS, UPS, and FedEx shipping labels using Bitcoin or Monero. Crypto-powered logistics for the modern era.",
+    url: "https://parcelchain.io",
+    category: "Web App",
+    type: "app",
+    image: null,
+    dateAdded: "Mar 10, 2026, 2:30 PM",
+    status: "active",
+  },
+];
 const FALLBACK_MEDIA = [];
 
 const PROJECT_TYPES = [
@@ -172,11 +184,7 @@ const DEFAULT_CREDENTIALS = {
 };
 
 // ─── Supabase helper: check if configured ───
-const isSupabaseConfigured = () => {
-  try {
-    return supabase && supabase.supabaseUrl && !supabase.supabaseUrl.includes("YOUR_PROJECT_ID");
-  } catch { return false; }
-};
+const isSupabaseConfigured = () => supabaseReady && supabase !== null;
 
 // ─── Supabase CRUD helpers ───
 const db = {
@@ -2368,24 +2376,29 @@ export default function App() {
   useEffect(() => {
     async function init() {
       try {
-        const [p, m, msgs, creds, stats] = await Promise.all([
-          db.loadProjects(),
-          db.loadMedia(),
-          db.loadMessages(),
-          db.loadSettings(),
-          db.loadAnalytics(),
-        ]);
-        setProjects(p);
-        setMedia(m);
-        setInboxMessages(msgs);
-        setCredentials(creds);
-        setAnalytics(stats);
-        if (msgs.length > 0) setMsgCount(msgs.length);
-
-        // Track this page visit
-        db.trackVisit();
+        if (isSupabaseConfigured()) {
+          const [p, m, msgs, creds, stats] = await Promise.all([
+            db.loadProjects(),
+            db.loadMedia(),
+            db.loadMessages(),
+            db.loadSettings(),
+            db.loadAnalytics(),
+          ]);
+          setProjects(p.length > 0 ? p : FALLBACK_PROJECTS);
+          setMedia(m);
+          setInboxMessages(msgs);
+          setCredentials(creds);
+          setAnalytics(stats);
+          if (msgs.length > 0) setMsgCount(msgs.length);
+          db.trackVisit();
+        } else {
+          // No Supabase — use fallbacks
+          setProjects(FALLBACK_PROJECTS);
+          console.log("Supabase not configured — running in local mode. Set up src/supabase.js to enable persistence.");
+        }
       } catch (err) {
         console.error("Init error:", err);
+        setProjects(FALLBACK_PROJECTS);
       }
       setLoading(false);
     }
