@@ -368,13 +368,14 @@ const db = {
     };
   },
   async updateSiteConfig(updates) {
-    if (!isSupabaseConfigured()) return { ok: false };
+    if (!isSupabaseConfigured()) return { ok: false, error: "Not configured" };
     const row = { updated_at: new Date().toISOString() };
     if (updates.heroSubtitle !== undefined) row.hero_subtitle = updates.heroSubtitle;
     if (updates.maxMediaPosts !== undefined) row.max_media_posts = updates.maxMediaPosts;
     if (updates.donateMethods !== undefined) row.donate_methods = JSON.stringify(updates.donateMethods);
+    console.log("Saving site_config:", row);
     const { error } = await supabase.from("site_config").update(row).eq("id", 1);
-    if (error) return { ok: false, error: error.message };
+    if (error) { console.error("updateSiteConfig error:", error); return { ok: false, error: error.message }; }
     return { ok: true };
   },
 
@@ -3357,11 +3358,15 @@ export default function App() {
 
   // Site config (wallets, coffee, max media)
   const handleUpdateSiteConfig = async (field, value) => {
+    console.log("Updating site config:", field, value);
     setSiteConfig(prev => ({ ...prev, [field]: value }));
     const result = await db.updateSiteConfig({ [field]: value });
     const labels = { heroSubtitle: "Subtitle", donateMethods: "Donate methods", maxMediaPosts: "Max media" };
     if (result && result.ok) {
       toast(`${labels[field] || field} updated`, "success");
+    } else if (result && result.error) {
+      console.error("Config save failed:", result.error);
+      toast(`Failed to save: ${result.error}`, "error");
     } else if (connStatus === "local") {
       toast("Updated (local only)", "warn");
     }
